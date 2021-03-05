@@ -19,6 +19,22 @@ import * as dataset from "./dataset";
 /** Suffix added to the state when storing if a control is hidden or not. */
 const HIDE_STATE_SUFFIX = "_hide";
 
+
+/** A map between update method names and functions themselves */
+export enum UpdateMethod {
+  SGD="SGD",
+  MOMENTUM="MOMENTUM",
+  RMSPROP="RMSPROP",
+  ADAM="ADAM"
+ }
+
+ export let updateMethods = {
+  "sgd": UpdateMethod.SGD,
+  "momentum": UpdateMethod.MOMENTUM,
+  "rmsprop": UpdateMethod.RMSPROP,
+  "adam": UpdateMethod.ADAM
+ };
+
 /** A map between names and activation functions. */
 export let activations: {[key: string]: nn.ActivationFunction} = {
   "relu": nn.Activations.RELU,
@@ -110,6 +126,8 @@ export class State {
     {name: "dataset", type: Type.OBJECT, keyMap: datasets},
     {name: "regDataset", type: Type.OBJECT, keyMap: regDatasets},
     {name: "learningRate", type: Type.NUMBER},
+	{name: "momentRate", type: Type.NUMBER},
+	{name: "secondMomentRate", type: Type.NUMBER},
     {name: "regularizationRate", type: Type.NUMBER},
     {name: "noise", type: Type.NUMBER},
     {name: "networkShape", type: Type.ARRAY_NUMBER},
@@ -130,11 +148,14 @@ export class State {
     {name: "tutorial", type: Type.STRING},
     {name: "problem", type: Type.OBJECT, keyMap: problems},
     {name: "initZero", type: Type.BOOLEAN},
-    {name: "hideText", type: Type.BOOLEAN}
+    {name: "hideText", type: Type.BOOLEAN},
+    {name: "updateMethod", type: Type.OBJECT, keyMap:updateMethods}
   ];
 
   [key: string]: any;
   learningRate = 0.03;
+  momentRate = 0.03;
+  secondMomentRate = 0.03;
   regularizationRate = 0;
   showTestData = false;
   noise = 0;
@@ -163,6 +184,7 @@ export class State {
   dataset: dataset.DataGenerator = dataset.classifyCircleData;
   regDataset: dataset.DataGenerator = dataset.regressPlane;
   seed: string;
+  updateMethod: UpdateMethod.SGD;
 
   /**
    * Deserializes the state from the url hash.

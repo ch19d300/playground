@@ -23,7 +23,8 @@ import {
   problems,
   regularizations,
   getKeyFromValue,
-  Problem
+  Problem,
+  updateMethods
 } from "./state";
 import {Example2D, shuffle} from "./dataset";
 import {AppendingLineChart} from "./linechart";
@@ -79,6 +80,8 @@ let HIDABLE_CONTROLS = [
   ["Step button", "stepButton"],
   ["Reset button", "resetButton"],
   ["Learning rate", "learningRate"],
+  ["Momentum rate", "momentRate"],
+  ["Second Momentum rate", "secondMomentRate"],
   ["Activation", "activation"],
   ["Regularization", "regularization"],
   ["Regularization rate", "regularizationRate"],
@@ -88,6 +91,7 @@ let HIDABLE_CONTROLS = [
   ["Noise level", "noise"],
   ["Batch size", "batchSize"],
   ["# of hidden layers", "numHiddenLayers"],
+  ["Update Method", "updateMethod"]
 ];
 
 class Player {
@@ -361,6 +365,16 @@ function makeGUI() {
     reset();
   });
   problem.property("value", getKeyFromValue(problems, state.problem));
+
+  // update-method
+  let updateMethodDropdown = d3.select("#updateMethod").on("change",function() {
+	console.log("control: "+this.value);
+    state.updateMethod = updateMethods[this.value];
+    parametersChanged = true;
+    reset();
+  });
+	console.log("Paramater changed: "+state.updateMethod);
+  updateMethodDropdown.property("value", getKeyFromValue(updateMethods, state.updateMethod));
 
   // Add scale to the gradient color map.
   let x = d3.scale.linear().domain([-1, 1]).range([0, 144]);
@@ -913,7 +927,8 @@ function oneStep(): void {
     nn.forwardProp(network, input);
     nn.backProp(network, point.label, nn.Errors.SQUARE);
     if ((i + 1) % state.batchSize === 0) {
-      nn.updateWeights(network, state.learningRate, state.regularizationRate);
+	  console.log("state updatemethod: "+state.updateMethod);
+      nn.updateWeights(network, state.learningRate, state.regularizationRate,state.updateMethod,state.momentRate,state.secondMomentRate);
     }
   });
   // Compute the loss.
@@ -955,8 +970,9 @@ function reset(onStartup=false) {
   let shape = [numInputs].concat(state.networkShape).concat([1]);
   let outputActivation = (state.problem === Problem.REGRESSION) ?
       nn.Activations.LINEAR : nn.Activations.TANH;
+	console.log("reset method: "+state.updateMethod);
   network = nn.buildNetwork(shape, state.activation, outputActivation,
-      state.regularization, constructInputIds(), state.initZero);
+      state.regularization,constructInputIds(), state.initZero);
   lossTrain = getLoss(network, trainData);
   lossTest = getLoss(network, testData);
   drawNetwork(network);

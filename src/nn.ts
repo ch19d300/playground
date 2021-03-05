@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+import { UpdateMethod } from "./state";
+
 /**
  * A node in a neural network. Each node has a state
  * (total input, output, and their respectively derivatives) which changes
@@ -167,7 +169,12 @@ export class Link {
   /** Number of accumulated derivatives since the last update. */
   numAccumulatedDers = 0;
   regularization: RegularizationFunction;
-
+//  updateMethod: UpdateMethod;
+  momentum = this.weight;
+  momentum_first = this.weight;
+  momentum_second = this.weight;
+  beta = 0.02; //momentum coefficient
+  alpha = 0.05; // second moment coefficient
   /**
    * Constructs a link in the neural network initialized with random weight.
    *
@@ -175,6 +182,7 @@ export class Link {
    * @param dest The destination node.
    * @param regularization The regularization function that computes the
    *     penalty for this weight. If null, there will be no regularization.
+//   * @param updateMethod The updateMethod chooses the learning algorithm to update the weights and biases
    */
   constructor(source: Node, dest: Node,
       regularization: RegularizationFunction, initZero?: boolean) {
@@ -182,8 +190,13 @@ export class Link {
     this.source = source;
     this.dest = dest;
     this.regularization = regularization;
+//	this.updateMethod = updateMethod;
     if (initZero) {
       this.weight = 0;
+	  this.momentum = 0;
+	  this.momentum_second = 0;
+//	  this.beta = 0.02;
+//	  this.alpha = 0.05;
     }
   }
 }
@@ -205,7 +218,11 @@ export function buildNetwork(
     networkShape: number[], activation: ActivationFunction,
     outputActivation: ActivationFunction,
     regularization: RegularizationFunction,
+//    updateMethod: UpdateMethod,
     inputIds: string[], initZero?: boolean): Node[][] {
+
+//      console.log("While building the network: "+updateMethod);
+      
   let numLayers = networkShape.length;
   let id = 1;
   /** List of layers, with each layer being a list of nodes. */
@@ -332,8 +349,8 @@ export function backProp(network: Node[][], target: number,
  * Updates the weights of the network using the previously accumulated error
  * derivatives.
  */
-export function updateWeights(network: Node[][], learningRate: number,
-    regularizationRate: number) {
+export function updateWeights(network: Node[][], learningRate: number, 
+    regularizationRate: number,updateMethod: string, momentRate: number, secondMomentRate: number) {
   for (let layerIdx = 1; layerIdx < network.length; layerIdx++) {
     let currentLayer = network[layerIdx];
     for (let i = 0; i < currentLayer.length; i++) {
@@ -350,12 +367,40 @@ export function updateWeights(network: Node[][], learningRate: number,
         if (link.isDead) {
           continue;
         }
+		console.log("Link update weights: "+updateMethod);
+		
+		let momentum = momentRate*link.momentum + link.accErrorDer;
+		let momentum_first = momentRate*link.momentum_first + (1-momentRate)*link.accErrorDer/link.numAccumulatedDers;
+		let momentum_second = secondMomentRate*link.momentum_second + ((1-secondMomentRate)*link.accErrorDer^2)/link.numAccumulatedDers;
         let regulDer = link.regularization ?
             link.regularization.der(link.weight) : 0;
         if (link.numAccumulatedDers > 0) {
-          // Update the weight based on dE/dw.
-          link.weight = link.weight -
-              (learningRate / link.numAccumulatedDers) * link.accErrorDer;
+		switch(updateMethod){
+			case "SGD":
+	          	// Update the weight based on dE/dw.
+	          	link.weight = link.weight -
+	              (learningRate / link.numAccumulatedDers) * link.accErrorDer;
+				break;
+			case "MOMENTUM":
+				link.weight = link.weight -
+	              (learningRate / link.numAccumulatedDers) * momentum;
+				break;
+			case "RMSPROP":
+				console.log("Second moment: "+momentum_second+" update: "+link.accErrorDer/((momentum_second^0.5)+0.0001));
+				link.weight = link.weight -
+	              (learningRate/link.numAccumulatedDers) * link.accErrorDer/((momentum_second^0.5)+0.0001); // 
+				break;
+			case "ADAM":
+				console.log("Second moment: "+momentum_second+", update: "+link.accErrorDer/((momentum_second^0.5)+0.0001));
+				console.log("First moment: "+momentum_first+", update: "+link.accErrorDer/((momentum_second^0.5)+0.0001));
+				link.weight = link.weight -
+	              (learningRate/link.numAccumulatedDers) * link.momentum_first/((momentum_second^0.5)+0.0001); // link.numAccumulatedDers
+				break;
+		}
+		link.momentum = momentum;
+		link.momentum_second = momentum_second;
+		link.momentum_first = momentum_first;
+
           // Further update the weight based on regularization.
           let newLinkWeight = link.weight -
               (learningRate * regularizationRate) * regulDer;
